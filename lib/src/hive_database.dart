@@ -1,6 +1,24 @@
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:ds_easy_db/ds_easy_db.dart';
 
+/// Hive CE implementation of [DatabaseRepository].
+///
+/// Provides fast, local key-value storage using Hive Community Edition.
+/// Perfect for preferences, cached data, and offline-first applications.
+///
+/// Features:
+/// - Zero native dependencies
+/// - Fast read/write operations
+/// - Automatic box management
+/// - No encryption (use SecureStorageDatabase for sensitive data)
+///
+/// Example:
+/// ```dart
+/// db.configure(
+///   prefs: HiveDatabase(),
+///   // ...
+/// );
+/// ```
 class HiveDatabase implements DatabaseRepository {
   @override
   Future<void> init() async {
