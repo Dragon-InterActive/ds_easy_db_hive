@@ -1,0 +1,21 @@
+name: ds_easy_db_hive
+description: "Hive storage implementation for DS-EasyDB. Provides fast, local key-value storage."
+version: 1.0.0
+homepage: https://github.com/Dragon-InterActive/ds_easy_db_hive
+license: BSD-3-Clause
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.35.1'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ds_easy_db: ^1.0.0
+  hive_ce: ^2.6.0
+  hive_ce_flutter: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
