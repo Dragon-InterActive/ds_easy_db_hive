@@ -16,8 +16,8 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  ds_easy_db: ^1.0.0
-  ds_easy_db_hive: ^1.0.0
+  ds_easy_db: ^1.1.1
+  ds_easy_db_hive: ^1.1.0
 ```
 
 ## Usage
@@ -62,17 +62,17 @@ class DS-EasyDBConfig {
 
 ```dart
 // Save theme preference
-await db.prefs.set('settings', 'theme', {
+await db.prefs!.set('settings', 'theme', {
   'mode': 'dark',
   'primaryColor': '#FF5722',
 });
 
 // Read preference
-final theme = await db.prefs.get('settings', 'theme');
+final theme = await db.prefs!.get('settings', 'theme');
 print(theme?['mode']); // dark
 
 // Update preference
-await db.prefs.update('settings', 'theme', {
+await db.prefs!.update('settings', 'theme', {
   'mode': 'light',
 });
 ```
@@ -81,15 +81,15 @@ await db.prefs.update('settings', 'theme', {
 
 ```dart
 // Save app state
-await db.prefs.set('state', 'current', {
+await db.prefs!.set('state', 'current', {
   'lastPage': '/home',
   'isLoggedIn': true,
   'timestamp': DatabaseRepository.serverTS, // Uses DateTime.now()
 });
 
 // Check if exists
-if (await db.prefs.exists('state', 'current')) {
-  final state = await db.prefs.get('state', 'current');
+if (await db.prefs!.exists('state', 'current')) {
+  final state = await db.prefs!.get('state', 'current');
   print('Last page: ${state?['lastPage']}');
 }
 ```
@@ -98,18 +98,18 @@ if (await db.prefs.exists('state', 'current')) {
 
 ```dart
 // Store multiple items
-await db.prefs.set('tasks', 'task1', {'title': 'Buy milk', 'done': false});
-await db.prefs.set('tasks', 'task2', {'title': 'Call John', 'done': true});
-await db.prefs.set('tasks', 'task3', {'title': 'Read book', 'done': false});
+await db.prefs!.set('tasks', 'task1', {'title': 'Buy milk', 'done': false});
+await db.prefs!.set('tasks', 'task2', {'title': 'Call John', 'done': true});
+await db.prefs!.set('tasks', 'task3', {'title': 'Read book', 'done': false});
 
 // Query incomplete tasks
-final incomplete = await db.prefs.query('tasks', 
+final incomplete = await db.prefs!.query('tasks', 
   where: {'done': false}
 );
 print('Incomplete tasks: ${incomplete.length}'); // 2
 
 // Get all tasks
-final allTasks = await db.prefs.getAll('tasks');
+final allTasks = await db.prefs!.getAll('tasks');
 print('Total tasks: ${allTasks?.length}'); // 3
 ```
 
@@ -117,11 +117,11 @@ print('Total tasks: ${allTasks?.length}'); // 3
 
 ```dart
 // Delete single item
-await db.prefs.delete('settings', 'theme');
+await db.prefs!.delete('settings', 'theme');
 
 // Check existence before delete
-if (await db.prefs.exists('settings', 'theme')) {
-  await db.prefs.delete('settings', 'theme');
+if (await db.prefs!.exists('settings', 'theme')) {
+  await db.prefs!.delete('settings', 'theme');
 }
 ```
 

@@ -12,6 +12,9 @@ import 'package:ds_easy_db/ds_easy_db.dart';
 /// - Automatic box management
 /// - No encryption (use SecureStorageDatabase for sensitive data)
 ///
+/// Every collection is stored in its own Hive box. Hive treats box names
+/// case-insensitively, so `Users` and `users` refer to the same collection.
+///
 /// Example:
 /// ```dart
 /// db.configure(
@@ -20,25 +23,49 @@ import 'package:ds_easy_db/ds_easy_db.dart';
 /// );
 /// ```
 class HiveDatabase implements DatabaseRepository {
-  @override
-  Future<void> init() async {
-    await Hive.initFlutter();
-  }
+  /// Creates a Hive database.
+  ///
+  /// By default Hive stores its files in the app's documents directory
+  /// (`Hive.initFlutter()`). Pass [path] to use a specific directory instead,
+  /// for example a temporary directory in tests.
+  HiveDatabase({this.path});
+
+  /// Optional directory for the Hive files. `null` uses `Hive.initFlutter()`.
+  final String? path;
 
   @override
-  Future<void> set(
-      String collection, String id, Map<String, dynamic> data) async {
-    final processedData = data.map((key, value) {
+  Future<void> init() async {
+    final directory = path;
+    if (directory != null) {
+      Hive.init(directory);
+    } else {
+      await Hive.initFlutter();
+    }
+  }
+
+  Future<Box<dynamic>> _box(String collection) async {
+    return Hive.isBoxOpen(collection)
+        ? Hive.box(collection)
+        : await Hive.openBox(collection);
+  }
+
+  Map<String, dynamic> _resolveServerTimestamps(Map<String, dynamic> data) {
+    return data.map((key, value) {
       if (value == DatabaseRepository.serverTS) {
         return MapEntry(key, DateTime.now());
       }
       return MapEntry(key, value);
     });
+  }
 
-    final box = Hive.isBoxOpen(collection)
-        ? Hive.box(collection)
-        : await Hive.openBox(collection);
-    await box.put(id, processedData);
+  @override
+  Future<void> set(
+    String collection,
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final box = await _box(collection);
+    await box.put(id, _resolveServerTimestamps(data));
   }
 
   @override
@@ -47,19 +74,9 @@ class HiveDatabase implements DatabaseRepository {
     String id,
     Map<String, dynamic> data,
   ) async {
-    final processedData = data.map((key, value) {
-      if (value == DatabaseRepository.serverTS) {
-        return MapEntry(key, DateTime.now());
-      }
-      return MapEntry(key, value);
-    });
-
-    final box = Hive.isBoxOpen(collection)
-        ? Hive.box(collection)
-        : await Hive.openBox(collection);
-    final existing = box.get(id) ?? {};
-    final updated = {...existing, ...processedData};
-    await box.put(id, updated);
+    final box = await _box(collection);
+    final existing = _toDocument(box.get(id)) ?? <String, dynamic>{};
+    await box.put(id, {...existing, ..._resolveServerTimestamps(data)});
   }
 
   @override
@@ -68,43 +85,25 @@ class HiveDatabase implements DatabaseRepository {
     String id, {
     dynamic defaultValue,
   }) async {
-    final box = Hive.isBoxOpen(collection)
-        ? Hive.box(collection)
-        : await Hive.openBox(collection);
-    final data = box.get(id, defaultValue: defaultValue);
-    if (data is Map) {
-      return data.cast<String, dynamic>();
-    } else {
-      return data;
-    }
+    final box = await _box(collection);
+    return _toDocument(box.get(id)) ?? defaultValue;
   }
 
   @override
   Future<Map<String, dynamic>?> getAll(String collection) async {
-    final box = Hive.isBoxOpen(collection)
-        ? Hive.box(collection)
-        : await Hive.openBox(collection);
+    final box = await _box(collection);
 
-    if (box.isEmpty) return null;
-
-    final Map<String, dynamic> result = {};
-    for (var key in box.keys) {
-      final data = box.get(key);
-      if (data is Map) {
-        result[key.toString()] = data.cast<String, dynamic>();
-      } else {
-        result[key.toString()] = data;
-      }
+    final result = <String, dynamic>{};
+    for (final key in box.keys) {
+      final document = _toDocument(box.get(key));
+      if (document != null) result[key.toString()] = document;
     }
-
-    return result;
+    return result.isEmpty ? null : result;
   }
 
   @override
   Future<bool> exists(String collection, String id) async {
-    final box = Hive.isBoxOpen(collection)
-        ? Hive.box(collection)
-        : await Hive.openBox(collection);
+    final box = await _box(collection);
     return box.containsKey(id);
   }
 
@@ -113,54 +112,65 @@ class HiveDatabase implements DatabaseRepository {
     String collection, {
     required Map<String, dynamic> where,
   }) async {
-    final box = Hive.isBoxOpen(collection)
-        ? Hive.box(collection)
-        : await Hive.openBox(collection);
-    for (var item in box.values) {
-      bool matches = true;
-      for (var entry in where.entries) {
-        if (item[entry.key] != entry.value) {
-          matches = false;
-          break;
-        }
-      }
-      if (matches) return true;
+    final box = await _box(collection);
+    for (final value in box.values) {
+      final document = _toDocument(value);
+      if (document != null && _matches(document, where)) return true;
     }
     return false;
   }
 
   @override
   Future<void> delete(String collection, String id) async {
-    final box = Hive.isBoxOpen(collection)
-        ? Hive.box(collection)
-        : await Hive.openBox(collection);
+    final box = await _box(collection);
     await box.delete(id);
   }
 
+  /// Returns the matching documents, each with its document id under `id`.
+  ///
+  /// A document that carries its own `id` field keeps it.
   @override
   Future<List<Map<String, dynamic>>> query(
     String collection, {
     Map<String, dynamic> where = const {},
   }) async {
-    final box = Hive.isBoxOpen(collection)
-        ? Hive.box(collection)
-        : await Hive.openBox(collection);
+    final box = await _box(collection);
 
-    if (where.isEmpty) {
-      return box.values
-          .map((item) => Map<String, dynamic>.from(item as Map))
-          .toList();
+    final result = <Map<String, dynamic>>[];
+    for (final key in box.keys) {
+      final document = _toDocument(box.get(key));
+      if (document == null || !_matches(document, where)) continue;
+      result.add(<String, dynamic>{'id': key.toString(), ...document});
     }
+    return result;
+  }
 
-    return box.values
-        .where((item) {
-          final map = item as Map;
-          for (var entry in where.entries) {
-            if (map[entry.key] != entry.value) return false;
-          }
-          return true;
-        })
-        .map((item) => Map<String, dynamic>.from(item as Map))
-        .toList();
+  bool _matches(Map<String, dynamic> document, Map<String, dynamic> where) {
+    for (final entry in where.entries) {
+      if (document[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
+
+  /// Converts what Hive hands back into a document.
+  ///
+  /// Hive returns every stored map as `Map<dynamic, dynamic>` — nested maps
+  /// included — so a shallow cast would leave nested values with the wrong
+  /// type and make callers fail on `as Map<String, dynamic>`. Values that are
+  /// not maps at all (written by other code into the same box) yield `null`.
+  static Map<String, dynamic>? _toDocument(Object? value) {
+    if (value is! Map) return null;
+    return _deepConvert(value) as Map<String, dynamic>;
+  }
+
+  static Object? _deepConvert(Object? value) {
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          entry.key.toString(): _deepConvert(entry.value),
+      };
+    }
+    if (value is List) return value.map(_deepConvert).toList();
+    return value;
   }
 }

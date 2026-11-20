@@ -1,6 +1,6 @@
 name: ds_easy_db_hive
 description: "Hive storage implementation for DS-EasyDB. Provides fast, local key-value storage."
-version: 1.0.1
+version: 1.1.0
 homepage: https://github.com/Dragon-InterActive/ds_easy_db_hive
 license: BSD-3-Clause
 
